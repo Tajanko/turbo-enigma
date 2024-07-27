@@ -78,15 +78,21 @@ for (observation in summary_table$Observation) {
   plot_tukey <- tidy_tukey %>%
     filter(Observation == observation)
   
-  p <- ggplot(plot_data, aes(x = interaction(Sex, Treatment, sep = " "), y = !!rlang::sym("Values"))) +
-    geom_boxplot(outlier.shape = NA, aes(fill = interaction(Sex, Treatment))) +  # Remove outliers from boxplot to avoid duplication with jitter
-    geom_jitter(width = 0.1, size = 1.5, alpha = 1) +  # Add jittered points
+  plot_tukey <- mutate(plot_tukey, xmin = case_when(xmin == 1 ~ 0.8,
+                                                    xmin == 2 ~ 1.2,
+                                                    xmin == 3 ~ 1.8))
+  plot_tukey <- mutate(plot_tukey, xmax = case_when(xmax == 2 ~ 1.2,
+                                                    xmax == 3 ~ 1.8,
+                                                    xmax == 4 ~ 2.2))
+
+  p <- ggplot(plot_data, aes(x = Treatment, y = !!rlang::sym("Values"))) +
+    geom_boxplot(outlier.shape = NA, aes(fill = Sex), key_glyph = draw_key_rect) +  # Remove outliers from boxplot to avoid duplication with jitter
+    geom_point(aes(fill = Sex), size = 1.5, position=position_jitterdodge(jitter.width = 0.2), show.legend = F) +
     labs(title = paste("Results for", original_observation),
-         x = "Groups",
          y = original_observation) +
     stat_pvalue_manual(plot_tukey, label = "p.adj.signif", y.position = "y.position", xmin = "xmin", xmax = "xmax", hide.ns = TRUE, tip.length = 0)+
-    scale_fill_viridis(discrete = TRUE, alpha = 0.5) + theme_bw() +
-    theme(legend.position = "none")  # Remove legend
+    scale_fill_viridis(discrete = TRUE, alpha = 0.5, option="viridis") + theme_bw() +
+    theme(legend.key = element_rect(color = "black"), legend.key.spacing.y = unit(0.2, "cm"))
   
   print(p)
   
