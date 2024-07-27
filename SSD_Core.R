@@ -1,76 +1,130 @@
 # Load necessary libraries
 if(!require(readxl)) install.packages("readxl", dependencies=TRUE)
 if(!require(dplyr)) install.packages("dplyr", dependencies=TRUE)
-if(!require(tidyr)) install.packages("tidyr", dependencies=TRUE)
-if(!require(broom)) install.packages("broom", dependencies=TRUE)
-if(!require(purrr)) install.packages("purrr", dependencies=TRUE)
-if(!require(multcomp)) install.packages("multcomp", dependencies=TRUE)
 if(!require(ggplot2)) install.packages("ggplot2", dependencies=TRUE)
+if(!require(viridis)) install.packages("viridis", dependencies=TRUE)
+if(!require(rstatix)) install.packages("rstatix", dependencies=TRUE)
+if(!require(tidyr)) install.packages("tidyr", dependencies=TRUE)
+if(!require(ggpubr)) install.packages("ggpubr", dependencies=TRUE)
+
 
 library(readxl)
 library(dplyr)
-library(tidyr)
-library(purrr)
-library(broom)
-library(multcomp)
 library(ggplot2)
+library(viridis)
+library(rstatix)
+library(tidyr)
+library(ggpubr)
 
-# Read the data from the first sheet "Clinical Data"
-data <- read_excel("SepticShockDataR.xlsx", sheet = "Core Data") %>%
+# Read the original data from the first sheet "Clinical Data" to get the original column names
+original_data <- read_excel("SepticShockDataR.xlsx", sheet = "Core Data")
+
+# Create a mapping of original names to modified names
+original_names <- names(original_data)[-1:-4]
+modified_names <- make.names(original_names)
+name_mapping <- setNames(original_names, modified_names)
+
+# Read the data and rename columns
+data <- original_data %>%
   rename_all(make.names)
 
-# Select relevant columns starting from column 5
-core_data <- data[,-1:-4]
+# Convert to tidy format
+tidy_data<-data %>% 
+  pivot_longer(cols = AST..U.L.:CD14, names_to = "Observation", values_to = "Values") %>%
+  mutate("Sex:Treatment" = paste0(Sex, ":", Treatment)) %>%
+  drop_na(Values)
 
-# Extract column names for clinical observations
-observation_columns <- names(core_data)
+tidy_data$`Sex:Treatment` <- factor(tidy_data$`Sex:Treatment`, 
+                                    levels = c("Female:Control", 
+                                               "Male:Control", 
+                                               "Estradiol:LPS", 
+                                               "Female:LPS", 
+                                               "Male:LPS"))
+tidy_data$Patient.ID <- factor(tidy_data$Patient.ID)
+tidy_data$Species <- factor(tidy_data$Species)
+tidy_data$Sex <- factor(tidy_data$Sex)
+tidy_data$Treatment <- factor(tidy_data$Treatment)
+tidy_data$Observation <- factor(tidy_data$Observation)
 
-# Function to perform two-way ANOVA for each observation
-perform_anova <- function(column_name) {
-  formula <- as.formula(paste(column_name, "~ Sex * Treatment", sep = " "))
-  result <- aov(formula, data = data)
-  tidy_result <- tidy(result)
-  tidy_result <- tidy_result %>% mutate(Observation = column_name)
-  return(tidy_result)
-}
+# Perform Tukey's HSD test
+tidy_tukey<-tidy_data %>% 
+  group_by(Observation) %>% 
+  tukey_hsd(Values ~ Sex * Treatment) %>%
+  ungroup()
 
-# Apply the function to all clinical observations
-anova_results <- map_dfr(observation_columns, perform_anova)
+
+write.csv(tidy_tukey, "SSD_Core_TukeyHSD.csv", row.names = FALSE) 
+
+tidy_tukey<-tidy_tukey %>%
+  filter(term == "Sex:Treatment")
 
 # Filter to retain sets where at least one p-value is less than 0.05
-significant_observations <- anova_results %>%
+sig_observations <- tidy_tukey %>%
   group_by(Observation) %>%
-  filter(any(p.value < 0.05)) %>%
+  filter(any(p.adj < 0.05)) %>%
   ungroup()
 
 # Extract unique names of significant observations
-unique_significant_observations <- significant_observations %>%
+sig_observations <- sig_observations %>%
   distinct(Observation)
 
-# Create a summary table of unique significant observations
-summary_table <- unique_significant_observations
+write.csv(sig_observations, "SSD_Core_Sig_Observations.csv", row.names = FALSE)
 
-# Perform Tukey's HSD test for each significant observation
-perform_tukey <- function(column_name) {
-  formula <- as.formula(paste(column_name, "~ Sex * Treatment", sep = " "))
-  aov_result <- aov(formula, data = data)
-  tukey_result <- TukeyHSD(aov_result)
-  tidy_tukey <- tidy(tukey_result) %>% mutate(Observation = column_name)
-  return(tidy_tukey)
+############
+for (observation in sig_observations$Observation) {
+  original_observation <- name_mapping[[observation]]
+  
+  plot_data <- tidy_data %>%
+    filter(Observation == observation) %>%
+    dplyr::select(Sex, Treatment, 'Sex:Treatment', Values)
+  plot_tukey <- tidy_tukey %>%
+    filter(Observation == observation) %>%
+    filter(p.adj.signif != 'ns') %>%
+    add_y_position(test = ., 
+                   data = plot_data, 
+                   formula = Values ~ Sex:Treatment, 
+                   fun = "max", 
+                   scales = "fixed", 
+                   step.increase = 0.12) %>%
+    add_x_position(test = ., x = 'Sex:Treatment')
+  
+  plot_tukey <- mutate(plot_tukey, xmin = case_when(xmin == 1 ~ 0.8,
+                                                    xmin == 2 ~ 1.2,
+                                                    xmin == 3 ~ 1.75,
+                                                    xmin == 4 ~ 2))
+  plot_tukey <- mutate(plot_tukey, xmax = case_when(xmax == 2 ~ 1.2,
+                                                    xmax == 3 ~ 1.75,
+                                                    xmax == 4 ~ 2,
+                                                    xmax == 5 ~ 2.25))
+  
+  p <- ggplot(plot_data, 
+              aes(x = Treatment, y = !!rlang::sym("Values"))) +
+    geom_boxplot(outlier.shape = NA, 
+                 aes(fill = Sex), 
+                 key_glyph = draw_key_rect) +  # Remove outliers from boxplot to avoid duplication with jitter
+    geom_point(aes(fill = Sex), 
+               size = 0.5, 
+               position=position_jitterdodge(jitter.width = 0.2), 
+               show.legend = F) +
+    labs(title = paste("Results for", original_observation),
+         y = original_observation) +
+    stat_pvalue_manual(plot_tukey, 
+                       label = "p.adj.signif", 
+                       y.position = "y.position", 
+                       xmin = "xmin", 
+                       xmax = "xmax", 
+                       hide.ns = TRUE, 
+                       tip.length = 0.02, 
+                       bracket.nudge.y = 0) +
+    scale_fill_viridis(discrete = TRUE, 
+                       alpha = 0.5, 
+                       option="viridis") + 
+    theme_bw() +
+    theme(legend.key = element_rect(color = "black"), 
+          legend.key.spacing.y = unit(0.2, "cm"))
+  
+  print(p)
+  
+  # Save each plot as a PNG file
+  #ggsave(filename = paste0("boxplot_", observation, ".png"), plot = p, width = 8, height = 6)
 }
-
-# Apply the function to all significant observations
-tukey_results <- map_dfr(unique_significant_observations$Observation, perform_tukey)
-
-# Filter Tukey results to retain sets where at least one p-value is less than 0.05
-tukey_significant_results <- tukey_results %>%
-  filter(adj.p.value < 0.05)
-
-# Save the summary table to a CSV file
-write.csv(summary_table, "SSD_Core_sig_observations.csv", row.names = FALSE)
-
-# Save significant ANOVA results to a CSV file
-write.csv(significant_observations, "SSD_Core_anova_sig_results.csv", row.names = FALSE)
-
-# Save significant Tukey results to a CSV file
-write.csv(tukey_significant_results, "SSD_Core_tukey_sig_results.csv", row.names = FALSE)
