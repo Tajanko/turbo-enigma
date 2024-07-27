@@ -6,6 +6,7 @@ if(!require(broom)) install.packages("broom", dependencies=TRUE)
 if(!require(purrr)) install.packages("purrr", dependencies=TRUE)
 if(!require(multcomp)) install.packages("multcomp", dependencies=TRUE)
 if(!require(ggplot2)) install.packages("ggplot2", dependencies=TRUE)
+if(!require(rstatix)) install.packages("rstatix", dependencies=TRUE)
 
 library(readxl)
 library(dplyr)
@@ -14,63 +15,33 @@ library(purrr)
 library(broom)
 library(multcomp)
 library(ggplot2)
+library(rstatix)
 
-# Read the data from the first sheet "Clinical Data"
+# Read the data and rename columns
 data <- read_excel("SepticShockDataR.xlsx", sheet = "Clinical Data") %>%
   rename_all(make.names)
 
-# Select relevant columns starting from column 7
-clinical_data <- data[,-1:-6]
+# Convert to tidy format
+tidy_data<-data %>% 
+  pivot_longer(cols = Mass.1..g.:SBC..mmol.L., names_to = "Observation", values_to = "Values")
 
-# Extract column names for clinical observations
-observation_columns <- names(clinical_data)
-
-# Function to perform two-way ANOVA for each observation
-perform_anova <- function(column_name) {
-  formula <- as.formula(paste(column_name, "~ Sex * Treatment", sep = " "))
-  result <- aov(formula, data = data)
-  tidy_result <- tidy(result)
-  tidy_result <- tidy_result %>% mutate(Observation = column_name)
-  return(tidy_result)
-}
-
-# Apply the function to all clinical observations
-anova_results <- map_dfr(observation_columns, perform_anova)
+# Perform Tukey's HSD test
+tidy_tukey<-tidy_data %>% 
+  group_by(Observation) %>% 
+  tukey_hsd(Values ~ Sex * Treatment)
 
 # Filter to retain sets where at least one p-value is less than 0.05
-significant_observations <- anova_results %>%
+significant_observations <- tidy_tukey %>%
   group_by(Observation) %>%
-  filter(any(p.value < 0.05)) %>%
+  filter(any(p.adj < 0.05)) %>%
   ungroup()
 
 # Extract unique names of significant observations
 unique_significant_observations <- significant_observations %>%
   distinct(Observation)
 
-# Create a summary table of unique significant observations
-summary_table <- unique_significant_observations
-
-# Perform Tukey's HSD test for each significant observation
-perform_tukey <- function(column_name) {
-  formula <- as.formula(paste(column_name, "~ Sex * Treatment", sep = " "))
-  aov_result <- aov(formula, data = data)
-  tukey_result <- TukeyHSD(aov_result)
-  tidy_tukey <- tidy(tukey_result) %>% mutate(Observation = column_name)
-  return(tidy_tukey)
-}
-
-# Apply the function to all significant observations
-tukey_results <- map_dfr(unique_significant_observations$Observation, perform_tukey)
-
-# Filter Tukey results to retain sets where at least one p-value is less than 0.05
-tukey_significant_results <- tukey_results %>%
-  filter(adj.p.value < 0.05)
-
 # Save the summary table to a CSV file
-write.csv(summary_table, "SSD_Clinical_sig_observations.csv", row.names = FALSE)
-
-# Save significant ANOVA results to a CSV file
-write.csv(significant_observations, "SSD_Clinical_anova_sig_results.csv", row.names = FALSE)
+write.csv(unique_significant_observations, "SSD_Clinical_sig_observations2.csv", row.names = FALSE)
 
 # Save significant Tukey results to a CSV file
-write.csv(tukey_significant_results, "SSD_Clinical_tukey_sig_results.csv", row.names = FALSE)
+write.csv(significant_observations, "SSD_Clinical_tukey_sig_results2.csv", row.names = FALSE)
