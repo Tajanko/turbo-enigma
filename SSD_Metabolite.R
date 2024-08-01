@@ -16,6 +16,8 @@ library(rstatix)
 library(tidyr)
 library(ggpubr)
 
+#Set your working directory
+setwd("~/R/SepticShock")
 
 # Read the original data from the first sheet "Clinical Data" to get the original column names
 original_data <- read_excel("SepticShockDataR.xlsx", sheet = "Metabolite Data")
@@ -130,5 +132,11 @@ for (observation in sig_observations$Observation) {
   print(p)
   
   # Save each plot as a PNG file
-  #ggsave(filename = paste0("boxplot_", observation, ".png"), plot = p, width = 8, height = 6)
+  ggsave(filename = paste0("boxplot_", 
+                           observation, 
+                           ".png"), 
+         path = '~/R/SepticShock/Plots/Metabolite',
+         plot = p, 
+         width = 8, 
+         height = 6)
 }
