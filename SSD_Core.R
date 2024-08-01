@@ -16,6 +16,9 @@ library(rstatix)
 library(tidyr)
 library(ggpubr)
 
+#Set your working directory
+setwd("~/R/SepticShock")
+
 # Read the original data from the first sheet "Clinical Data" to get the original column names
 original_data <- read_excel("SepticShockDataR.xlsx", sheet = "Core Data")
 
@@ -111,7 +114,8 @@ for (observation in sig_observations$Observation) {
     stat_pvalue_manual(plot_tukey, 
                        label = "p.adj.signif", 
                        y.position = "y.position", 
-                       xmin = "xmin", 
+                       size = 3.88,
+                       xmin = "xmin",
                        xmax = "xmax", 
                        hide.ns = TRUE, 
                        tip.length = 0.02, 
@@ -126,5 +130,11 @@ for (observation in sig_observations$Observation) {
   print(p)
   
   # Save each plot as a PNG file
-  #ggsave(filename = paste0("boxplot_", observation, ".png"), plot = p, width = 8, height = 6)
+  ggsave(filename = paste0("boxplot_", 
+                           observation, 
+                           ".png"), 
+         path = '~/R/SepticShock/Plots/Core',
+         plot = p, 
+         width = 8, 
+         height = 6)
 }
