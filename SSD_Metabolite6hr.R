@@ -37,7 +37,7 @@ data <- data %>%
 
 # Convert to tidy format
 tidy_data<-data %>% 
-  pivot_longer(cols = L.alanine:X2.Oxoglutarate, names_to = "Observation", values_to = "Values") %>%
+  pivot_longer(cols = L.alanine:X.5Z.8Z.11Z.14Z.17Z..Icosapentaenoic.acid, names_to = "Observation", values_to = "Values") %>%
   mutate("Sex:Treatment" = paste0(Sex, ":", Treatment)) %>%
   drop_na(Values)
 
@@ -59,7 +59,7 @@ tidy_tukey<-tidy_data %>%
   tukey_hsd(Values ~ Sex * Treatment) %>%
   ungroup()
 
-write.csv(tidy_tukey, "SSD_Metabolite_TukeyHSD.csv", row.names = FALSE) 
+write.csv(tidy_tukey, "SSD_Metabolite6hr_TukeyHSD.csv", row.names = FALSE) 
 
 tidy_tukey<-tidy_tukey %>%
   filter(term == "Sex:Treatment")
@@ -74,7 +74,7 @@ sig_observations <- tidy_tukey %>%
 sig_observations <- sig_observations %>%
   distinct(Observation)
 
-write.csv(sig_observations, "SSD_Metabolite_Sig_Observations.csv", row.names = FALSE)
+write.csv(sig_observations, "SSD_Metabolite6hr_Sig_Observations.csv", row.names = FALSE)
 
 ############
 for (observation in sig_observations$Observation) {
@@ -132,10 +132,9 @@ for (observation in sig_observations$Observation) {
   print(p)
   
   # Save each plot as a PNG file
-  ggsave(filename = paste0("boxplot_", 
-                           observation, 
-                           ".png"), 
-         path = '~/R/SepticShock/Plots/Metabolite',
+  ggsave(filename = paste0(observation, 
+                           "_6hr.png"),
+         path = '~/R/SepticShock/Plots/Metabolite/6hr',
          plot = p, 
          width = 8, 
          height = 6)
