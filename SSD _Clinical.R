@@ -16,6 +16,9 @@ library(rstatix)
 library(tidyr)
 library(ggpubr)
 
+#Set your working directory
+setwd("~/R/SepticShock")
+
 #Read the original data from the first sheet "Clinical Data" to get the original column names
 original_data <- read_excel("SepticShockDataR.xlsx", sheet = "Clinical Data")
 
@@ -110,9 +113,10 @@ for (observation in sig_observations$Observation) {
                        hide.ns = TRUE, 
                        tip.length = 0.02, 
                        bracket.nudge.y = 0) +
-    scale_fill_viridis(discrete = TRUE, 
-                       alpha = 0.5, 
-                       option="viridis") + 
+    scale_fill_manual(values = alpha(c("#21918c","#fde725"), 0.5))+ 
+    # scale_fill_viridis(discrete = TRUE, 
+    #                    alpha = 0.5, 
+    #                    option="viridis") + 
     theme_bw() +
     theme(legend.key = element_rect(color = "black"), 
           legend.key.spacing.y = unit(0.2, "cm"))
@@ -120,6 +124,12 @@ for (observation in sig_observations$Observation) {
   print(p)
   
   # Save each plot as a PNG file
-  #ggsave(filename = paste0("boxplot_", observation, ".png"), plot = p, width = 8, height = 6)
+  ggsave(filename = paste0("boxplot_", 
+                           observation, 
+                           ".png"), 
+         path = '~/R/SepticShock/Plots/Clinical',
+         plot = p, 
+         width = 8, 
+         height = 6)
 }
 
