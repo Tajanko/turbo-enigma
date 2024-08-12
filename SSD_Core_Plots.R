@@ -49,6 +49,25 @@ tidy_data$Sex <- factor(tidy_data$Sex)
 tidy_data$Treatment <- factor(tidy_data$Treatment)
 tidy_data$Observation <- factor(tidy_data$Observation)
 
+# Calculate means and standard deviations
+mean_sd_table <- tidy_data %>%
+  group_by(Observation, `Sex:Treatment`) %>%
+  summarize(Mean = mean(Values, na.rm = TRUE),
+            Std_Dev = sd(Values, na.rm = TRUE)) %>%
+  mutate(Formatted = paste0(round(Mean, 2), " ± ", round(Std_Dev, 2))) %>%
+  select(Observation, `Sex:Treatment`, Formatted) %>%
+  pivot_wider(names_from = `Sex:Treatment`, 
+              values_from = Formatted, 
+              names_glue = "{gsub(':', ' ', `Sex:Treatment`)}") %>%
+  group_by(Observation) %>%
+  summarize(across(everything(), ~ paste(na.omit(.), collapse = ""))) %>%
+  ungroup() %>%
+  # Replace observation names with original names
+  mutate(Observation = name_mapping[Observation])
+
+# Save the Stats table to a CSV file
+write.csv(mean_sd_table, "SSD_Core_StatsTable.csv", row.names = FALSE, fileEncoding = "UTF-8")
+
 # Perform Tukey's HSD test
 tidy_tukey<-tidy_data %>% 
   group_by(Observation) %>% 
