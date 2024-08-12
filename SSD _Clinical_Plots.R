@@ -54,8 +54,12 @@ tidy_tukey<-tidy_data %>%
 
 write.csv(tidy_tukey, "SSD_Clinical_TukeyHSD.csv", row.names = FALSE) 
 
+# Filter to retain only Group Differences between reasonable groups
 tidy_tukey<-tidy_tukey %>%
-  filter(term == "Sex:Treatment")
+  filter(term == "Sex:Treatment") %>%
+  filter(group1 != "Female:Control" | group2 != "Male:LPS") %>%
+  filter(group1 != "Male:Control" | group2 != "Female:LPS") %>%
+  filter(p.adj.signif != 'ns') 
 
 # Filter to retain sets where at least one p-value is less than 0.05
 sig_observations <- tidy_tukey %>%
@@ -78,13 +82,16 @@ for (observation in sig_observations$Observation) {
     dplyr::select(Sex, Treatment, 'Sex:Treatment', Values)
   plot_tukey <- tidy_tukey %>%
     filter(Observation == observation) %>%
-    filter(p.adj.signif != 'ns') %>%
     add_y_position(test = ., 
                    data = plot_data, 
                    formula = Values ~ Sex:Treatment, 
                    fun = "max", 
-                   scales = "fixed", 
-                   step.increase = 0.12) %>%
+                   scales = "free", 
+                   comparisons = list(c("Female:LPS", "Male:LPS"),
+                                      c("Male:Control", "Male:LPS"), 
+                                      c("Female:Control", "Female:LPS"),
+                                      c("Female:Control", "Male:Control")), 
+                   step.increase = 0.07) %>%
     add_x_position(test = ., x = 'Sex:Treatment')
   
   plot_tukey <- mutate(plot_tukey, xmin = case_when(xmin == 1 ~ 0.8,
