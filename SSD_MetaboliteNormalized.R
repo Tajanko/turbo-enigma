@@ -20,7 +20,7 @@ library(ggpubr)
 setwd("~/R/SepticShock")
 
 # Read the original data from the first sheet "Clinical Data" to get the original column names
-original_data <- read_excel("SepticShockDataR.xlsx", sheet = "Metabolite Data")
+original_data <- read_excel("SepticShockDataR.xlsx", sheet = "Normalized Metabolite Data")
 
 # Create a mapping of original names to modified names
 original_names <- names(original_data)[-1:-5]
@@ -30,10 +30,6 @@ name_mapping <- setNames(original_names, modified_names)
 # Read the data and rename columns
 data <- original_data %>%
   rename_all(make.names)
-
-# Filter to retain only rows where timepoint == 6
-data <- data %>%
-  filter(Timepoint == 6)
 
 # Convert to tidy format
 tidy_data<-data %>% 
@@ -59,10 +55,17 @@ tidy_tukey<-tidy_data %>%
   tukey_hsd(Values ~ Sex * Treatment) %>%
   ungroup()
 
-write.csv(tidy_tukey, "SSD_Metabolite6hr_TukeyHSD.csv", row.names = FALSE) 
+write.csv(tidy_tukey, "SSD_MetaboliteNormalized_TukeyHSD.csv", row.names = FALSE) 
 
+# Filter to retain only Group Differences between reasonable groups
 tidy_tukey<-tidy_tukey %>%
-  filter(term == "Sex:Treatment")
+  filter(term == "Sex:Treatment") %>%
+  filter(group1 != "Female:Control" | group2 != "Male:LPS") %>%
+  filter(group1 != "Female:Control" | group2 != "Estradiol:LPS") %>%
+  filter(group1 != "Male:Control" | group2 != "Female:LPS") %>%
+  filter(group1 != "Estradiol:Control") %>%
+  filter(group1 != "Male:Control" | group2 != "Estradiol:LPS")  %>%
+  filter(p.adj.signif != 'ns') 
 
 # Filter to retain sets where at least one p-value is less than 0.05
 sig_observations <- tidy_tukey %>%
@@ -74,7 +77,7 @@ sig_observations <- tidy_tukey %>%
 sig_observations <- sig_observations %>%
   distinct(Observation)
 
-write.csv(sig_observations, "SSD_Metabolite6hr_Sig_Observations.csv", row.names = FALSE)
+write.csv(sig_observations, "SSD_MetaboliteNormalized_Sig_Observations.csv", row.names = FALSE)
 
 ############
 for (observation in sig_observations$Observation) {
@@ -85,12 +88,17 @@ for (observation in sig_observations$Observation) {
     dplyr::select(Sex, Treatment, 'Sex:Treatment', Values)
   plot_tukey <- tidy_tukey %>%
     filter(Observation == observation) %>%
-    filter(p.adj.signif != 'ns') %>%
     add_y_position(test = ., 
                    data = plot_data, 
                    formula = Values ~ Sex:Treatment, 
                    fun = "max", 
-                   scales = "fixed", 
+                   scales = "free", 
+                   comparisons = list(c("Female:LPS", "Male:LPS"),
+                                      c("Estradiol:LPS", "Female:LPS"),
+                                      c("Estradiol:LPS", "Male:LPS"),
+                                      c("Male:Control", "Male:LPS"), 
+                                      c("Female:Control", "Female:LPS"),
+                                      c("Female:Control", "Male:Control")), 
                    step.increase = 0.12) %>%
     add_x_position(test = ., x = 'Sex:Treatment')
   
@@ -112,7 +120,7 @@ for (observation in sig_observations$Observation) {
                size = 0.5, 
                position=position_jitterdodge(jitter.width = 0.2), 
                show.legend = F) +
-    labs(title = paste("Results for", original_observation),
+    labs(title = paste("Normalized Results for", original_observation),
          y = original_observation) +
     stat_pvalue_manual(plot_tukey, 
                        label = "p.adj.signif", 
@@ -133,8 +141,8 @@ for (observation in sig_observations$Observation) {
   
   # Save each plot as a PNG file
   ggsave(filename = paste0(observation, 
-                           "_6hr.png"),
-         path = '~/R/SepticShock/Plots/Metabolite/6hr',
+                           "_Normalized.png"),
+         path = '~/R/SepticShock/Plots/Metabolite/Normalized',
          plot = p, 
          width = 8, 
          height = 6)
