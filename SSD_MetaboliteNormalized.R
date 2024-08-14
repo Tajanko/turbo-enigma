@@ -64,7 +64,10 @@ mean_sd_table <- tidy_data %>%
   summarize(across(everything(), ~ paste(na.omit(.), collapse = ""))) %>%
   ungroup() %>%
   # Replace observation names with original names
-  mutate(Observation = name_mapping[Observation])
+  mutate(Observation = recode(Observation, !!!name_mapping)) %>%
+  # Add a factor to reorder according to the name mapping
+  mutate(Observation = factor(Observation, levels = original_names)) %>%
+  arrange(Observation)  # Reorder based on the original names
 
 # Save the Stats table to a CSV file
 write.csv(mean_sd_table, "SSD_Metabolite_StatsTable.csv", row.names = FALSE, fileEncoding = "UTF-8")
