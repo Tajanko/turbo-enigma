@@ -48,6 +48,9 @@ tidy_data$Sex <- factor(tidy_data$Sex)
 tidy_data$Treatment <- factor(tidy_data$Treatment)
 tidy_data$Observation <- factor(tidy_data$Observation)
 
+
+####### ANALYSIS ###############################################################
+
 # Calculate means and standard deviations
 mean_sd_table <- tidy_data %>%
   group_by(Observation, `Sex:Treatment`) %>%
