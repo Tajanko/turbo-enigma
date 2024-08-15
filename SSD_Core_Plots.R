@@ -1,23 +1,22 @@
-# Load necessary libraries
-if(!require(readxl)) install.packages("readxl", dependencies=TRUE)
-if(!require(dplyr)) install.packages("dplyr", dependencies=TRUE)
-if(!require(ggplot2)) install.packages("ggplot2", dependencies=TRUE)
-if(!require(viridis)) install.packages("viridis", dependencies=TRUE)
-if(!require(rstatix)) install.packages("rstatix", dependencies=TRUE)
-if(!require(tidyr)) install.packages("tidyr", dependencies=TRUE)
-if(!require(ggpubr)) install.packages("ggpubr", dependencies=TRUE)
+####### PREAMBLE ###############################################################
+
+requiredPackages <- c("readxl", "dplyr", "ggplot2", "viridis", "rstatix", "tidyr", "ggpubr", "patchwork")
 
 
-library(readxl)
-library(dplyr)
-library(ggplot2)
-library(viridis)
-library(rstatix)
-library(tidyr)
-library(ggpubr)
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg))
+    install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+
+ipak(requiredPackages)
 
 #Set your working directory
 setwd("~/R/SepticShock")
+
+
+####### DATA PREP ##############################################################
 
 # Read the original data from the first sheet "Clinical Data" to get the original column names
 original_data <- read_excel("SepticShockDataR.xlsx", sheet = "Core Data")
@@ -100,7 +99,11 @@ sig_observations <- sig_observations %>%
 
 write.csv(sig_observations, "SSD_Core_Sig_Observations.csv", row.names = FALSE)
 
-############
+plots_list <- list()
+
+
+####### INDIVIDUAL PLOTTING ####################################################
+
 for (observation in sig_observations$Observation) {
   original_observation <- name_mapping[[observation]]
   
@@ -156,7 +159,10 @@ for (observation in sig_observations$Observation) {
                        alpha = 0.5, 
                        option="viridis") + 
     theme_bw() +
-    theme(legend.key = element_rect(color = "black"), 
+    theme(panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          plot.title = element_text(hjust = 0.5),
+          legend.key = element_rect(color = "black"), 
           legend.key.spacing.y = unit(0.2, "cm"))
   
   print(p)
@@ -170,3 +176,105 @@ for (observation in sig_observations$Observation) {
          width = 8, 
          height = 6)
 }
+
+
+####### GRID PLOTTING ##########################################################
+
+for (observation in sig_observations$Observation) {
+  original_observation <- name_mapping[[observation]]
+  
+  plot_data <- tidy_data %>%
+    filter(Observation == observation) %>%
+    dplyr::select(Sex, Treatment, 'Sex:Treatment', Values)
+  plot_tukey <- tidy_tukey %>%
+    filter(Observation == observation)
+  plot_tukey <- plot_tukey %>%  
+    add_y_position(test = ., 
+                   data = plot_data, 
+                   formula = Values ~ Sex:Treatment, 
+                   fun = "max", 
+                   scales = "free", 
+                   comparisons = list(c("Female:LPS", "Male:LPS"),
+                                      c("Estradiol:LPS", "Female:LPS"),
+                                      c("Estradiol:LPS", "Male:LPS"),
+                                      c("Male:Control", "Male:LPS"), 
+                                      c("Female:Control", "Female:LPS")),
+                   step.increase = 0.12) %>%
+    add_x_position(test = ., x = 'Sex:Treatment')
+  
+  plot_tukey <- mutate(plot_tukey, xmin = case_when(xmin == 1 ~ 0.8,
+                                                    xmin == 2 ~ 1.2,
+                                                    xmin == 3 ~ 1.75,
+                                                    xmin == 4 ~ 2))
+  plot_tukey <- mutate(plot_tukey, xmax = case_when(xmax == 2 ~ 1.2,
+                                                    xmax == 3 ~ 1.75,
+                                                    xmax == 4 ~ 2,
+                                                    xmax == 5 ~ 2.25))
+  
+  p <- ggplot(plot_data, 
+              aes(x = Treatment, y = !!rlang::sym("Values"))) +
+    geom_boxplot(outlier.shape = NA, 
+                 aes(fill = Sex), 
+                 key_glyph = draw_key_rect) +  # Remove outliers from boxplot to avoid duplication with jitter
+    geom_point(aes(fill = Sex), 
+               size = 0.5, 
+               position=position_jitterdodge(jitter.width = 0.2), 
+               show.legend = FALSE) +  # Disable legend for now
+    labs(title = paste("Results for", original_observation),
+         y = original_observation) +
+    stat_pvalue_manual(plot_tukey, 
+                       label = "p.adj.signif", 
+                       y.position = "y.position", 
+                       size = 3.88,
+                       xmin = "xmin",
+                       xmax = "xmax", 
+                       hide.ns = TRUE, 
+                       tip.length = 0.02, 
+                       bracket.nudge.y = 0) +
+    scale_fill_viridis(discrete = TRUE, 
+                       alpha = 0.5, 
+                       option="viridis") + 
+    theme_bw() +
+    theme(panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          plot.title = element_text(hjust = 0.5),
+          legend.key = element_rect(color = "black"), 
+          legend.key.spacing.y = unit(0.2, "cm"),
+          legend.position = "none")  # Remove legend
+  
+  # Store the plot without the legend in the list
+  plots_list[[observation]] <- p
+}
+
+# Combine plots into a 2x2 grid with a shared legend
+plot_2x2 <- (plots_list[[sig_observations$Observation[4]]] + plots_list[[sig_observations$Observation[9]]]) / 
+  (plots_list[[sig_observations$Observation[8]]] + plots_list[[sig_observations$Observation[7]]]) + 
+  plot_layout(guides = "collect") & theme(legend.position = 'right',
+                                          legend.text = element_text(size = 12.5),
+                                          legend.title = element_text(size = 15),
+                                          legend.key.size = unit(1.25, "cm"),
+                                          legend.spacing.x = unit(1, 'cm'))
+
+# Combine plots into a 2x3 grid with a shared legend
+plot_2x3 <- (plots_list[[sig_observations$Observation[1]]] + plots_list[[sig_observations$Observation[2]]]) / 
+  (plots_list[[sig_observations$Observation[3]]] + plots_list[[sig_observations$Observation[5]]]) / 
+  (plots_list[[sig_observations$Observation[6]]] + plots_list[[sig_observations$Observation[10]]]) + 
+  plot_layout(guides = "collect") & theme(legend.position = 'right',
+                                          legend.text = element_text(size = 15),
+                                          legend.title = element_text(size = 18),
+                                          legend.key.size = unit(1.5, "cm"),
+                                          legend.spacing.x = unit(1, 'cm'))
+
+
+# Save the combined plots
+ggsave(filename = "InflammatoryMarkers.png",
+       path = '~/R/SepticShock/Plots/Core',
+       plot = plot_2x2, 
+       width = 16, 
+       height = 12)
+ggsave(filename = "TargetOrgans.png",
+       path = '~/R/SepticShock/Plots/Core',
+       plot = plot_2x3, 
+       width = 16, 
+       height = 18)
+
