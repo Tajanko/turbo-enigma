@@ -1,28 +1,22 @@
-# Load necessary libraries
-if(!require(readxl)) install.packages("readxl", dependencies=TRUE)
-if(!require(dplyr)) install.packages("dplyr", dependencies=TRUE)
-if(!require(ggplot2)) install.packages("ggplot2", dependencies=TRUE)
-if(!require(viridis)) install.packages("viridis", dependencies=TRUE)
-if(!require(rstatix)) install.packages("rstatix", dependencies=TRUE)
-if(!require(tidyr)) install.packages("tidyr", dependencies=TRUE)
-if(!require(ggpubr)) install.packages("ggpubr", dependencies=TRUE)
-if(!require(stringr)) install.packages("stringr", dependencies=TRUE)
-if(!require(forcats)) install.packages("forcats", dependencies=TRUE)
-if(!require(egg)) install.packages("egg", dependencies=TRUE)
+####### PREAMBLE ###############################################################
 
-library(readxl)
-library(dplyr)
-library(ggplot2)
-library(viridis)
-library(rstatix)
-library(tidyr)
-library(ggpubr)
-library(stringr)
-library(forcats)
-library(egg)
+requiredPackages <- c("readxl", "dplyr", "ggplot2", "viridis", "rstatix", "tidyr", "ggpubr", "stringr", "forcats", "egg")
+
+
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg))
+    install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+
+ipak(requiredPackages)
 
 #Set your working directory
 setwd("~/R/SepticShock")
+
+
+####### DATA PREP ##############################################################
 
 # Read the original data from the first sheet "Clinical Data" to get the original column names
 original_data <- read_excel("SepticShockDataR.xlsx", sheet = "Normalized Metabolite Data")
@@ -56,6 +50,8 @@ tidy_data$Treatment <- factor(tidy_data$Treatment)
 tidy_data$Observation <- factor(tidy_data$Observation)
 
 
+####### ANALYSIS ###############################################################
+
 # Calculate means
 mean_table <- tidy_data %>%
   group_by(Observation, `Sex:Treatment`) %>%
@@ -68,25 +64,36 @@ mean_table <- tidy_data %>%
   group_by(Observation) %>%
   summarize(across(everything(), ~ paste(na.omit(.), collapse = ""))) %>%
   ungroup() %>%
-  # Replace observation names with original names
+# Replace observation names with original names
   mutate(Observation = recode(Observation, !!!name_mapping)) %>%
 # Add a factor to reorder according to the name mapping
   mutate(Observation = factor(Observation, levels = original_names)) %>%
   arrange(Observation)  # Reorder based on the original names
 
+# Convert to tidy format
 tidy_table<-mean_table %>% 
   pivot_longer(cols = 'Estradiol LPS':'Male LPS', names_to = "Group", values_to = "Mean") %>%
   select(Observation, Group, Mean)
 
+# Remove LPS tag
 tidy_table <- mutate(tidy_table, Group=as.character(Group)) %>%
   mutate(tidy_table,Group=sapply(strsplit(tidy_table$Group, split=' ', fixed=TRUE), function(x) (x[1])))
 
+# Reorder Group levels
 tidy_table$Group <- factor(tidy_table$Group, 
                            levels = c("Male", 
                                       "Female", 
                                       "Estradiol"))
 tidy_table$Mean <-  as.numeric(tidy_table$Mean)
 
+tidy_table <- tidy_table %>%
+  group_by(Observation) %>%
+  mutate(Male_Mean = Mean[Group == "Male"]) %>%
+  mutate(Ratio = Mean / Male_Mean) %>%
+  select(Observation, Group, Mean, Ratio) %>%
+  ungroup()
+
+# Assign metabolite Groupings
 physio_list <- c("Amino Acids",'Nucleotides','Glycolysis and TCA cycle','Misc Processes','Lipid Biosynthesis','Fatty Acids')
 physio_list<-as.data.frame(physio_list)
 colnames(physio_list) <- "Physio"
@@ -98,23 +105,15 @@ tidy_table$Physio[148:225] <- physio_list[4,1]
 tidy_table$Physio[226:300] <- physio_list[5,1]
 tidy_table$Physio[301:351] <- physio_list[6,1]
 
-# Calculate the means and divide by the Male group mean
-comparison_table <- tidy_table %>%
-  group_by(Observation) %>%
-  mutate(Male_Mean = Mean[Group == "Male"],
-         Ratio_to_Male = Mean / Male_Mean) %>%
-  select(Observation, Group, Ratio_to_Male, Physio) %>%
-  ungroup()
-colnames(comparison_table)[3] <- "Mean"
+
+####### PLOTTING ###############################################################
 
 for (physio in physio_list$Physio) {
 
-plot_table1 <- tidy_table %>%
-  filter(Physio == physio)
-plot_table2 <- comparison_table %>%
+plot_table <- tidy_table %>%
   filter(Physio == physio)
 
-p <- ggplot(plot_table1, 
+p <- ggplot(plot_table, 
              aes(x = Group, y = fct_rev(as_factor(Observation)), fill = Mean)) +
   geom_tile(color = "white",
             lwd = 1.5,
@@ -128,8 +127,8 @@ p <- ggplot(plot_table1,
         panel.grid.minor = element_blank(),
         panel.border=element_blank(),
         plot.title = element_text(hjust = 0.5),
-        legend.key.height = 0.2*unit(n_distinct(plot_table1$Observation), 'cm'),
-        legend.key.width = 0.25*unit(n_distinct(plot_table1$Group), 'cm'),
+        legend.key.height = 0.2*unit(n_distinct(plot_table$Observation), 'cm'),
+        legend.key.width = 0.25*unit(n_distinct(plot_table$Group), 'cm'),
         legend.title=element_blank()) +
   labs(title = paste(physio, "Relative to Baseline"),
        y = '',
@@ -137,8 +136,19 @@ p <- ggplot(plot_table1,
 
 print(p)
 
-q <- ggplot(plot_table2, 
-            aes(x = Group, y = fct_rev(as_factor(Observation)), fill = Mean)) +
+q <- egg::set_panel_size(p, height=unit(n_distinct(plot_table$Observation), "cm"),
+                         width=4*unit(n_distinct(plot_table$Group), "cm") )
+
+# Save each plot as a PNG file
+ggsave(filename = paste0("Heatmap_",physio,".png"),
+       path = '~/R/SepticShock/Heatmaps/Metabolite',
+       plot = q, 
+       width = 3*unit(n_distinct(plot_table$Group), "cm"), 
+       height = 0.45*unit(n_distinct(plot_table$Observation), "cm"))
+
+
+p <- ggplot(plot_table, 
+            aes(x = Group, y = fct_rev(as_factor(Observation)), fill = Ratio)) +
   geom_tile(color = "black",
             lwd = 0.5,
             linetype = 1) +
@@ -153,31 +163,23 @@ q <- ggplot(plot_table2,
         panel.grid.minor = element_blank(),
         panel.border=element_blank(),
         plot.title = element_text(hjust = 0.5),
-        legend.key.height = 0.2*unit(n_distinct(plot_table2$Observation), 'cm'),
-        legend.key.width = 0.25*unit(n_distinct(plot_table2$Group), 'cm'),
+        legend.key.height = 0.2*unit(n_distinct(plot_table$Observation), 'cm'),
+        legend.key.width = 0.25*unit(n_distinct(plot_table$Group), 'cm'),
         legend.title=element_blank()) +
   labs(title = paste(physio, "Relative to Baseline as a Ratio of Male"),
        y = '',
        x = '')
 
-print(q)
+print(p)
 
-
-b <- egg::set_panel_size(p, height=unit(n_distinct(plot_table1$Observation), "cm"),
-                           width=4*unit(n_distinct(plot_table1$Group), "cm") )
-d <- egg::set_panel_size(q, height=unit(n_distinct(plot_table2$Observation), "cm"),
-                           width=4*unit(n_distinct(plot_table2$Group), "cm") )
+q <- egg::set_panel_size(p, height=unit(n_distinct(plot_table$Observation), "cm"),
+                         width=4*unit(n_distinct(plot_table$Group), "cm") )
 
 # Save each plot as a PNG file
-ggsave(filename = paste0("Heatmap_",physio,".png"),
-       path = '~/R/SepticShock/Heatmaps/Metabolite',
-       plot = b, 
-       width = 3*unit(n_distinct(plot_table2$Group), "cm"), 
-       height = 0.45*unit(n_distinct(plot_table2$Observation), "cm"))
 ggsave(filename = paste0("HeatmapRatio_",physio,".png"),
        path = '~/R/SepticShock/Heatmaps/Metabolite',
-       plot = d, 
-       width = 3*unit(n_distinct(plot_table2$Group), "cm"), 
-       height = 0.45*unit(n_distinct(plot_table2$Observation), "cm"))
+       plot = q, 
+       width = 3*unit(n_distinct(plot_table$Group), "cm"), 
+       height = 0.45*unit(n_distinct(plot_table$Observation), "cm"))
 
 }
