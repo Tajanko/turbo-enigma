@@ -8,6 +8,7 @@ if(!require(tidyr)) install.packages("tidyr", dependencies=TRUE)
 if(!require(ggpubr)) install.packages("ggpubr", dependencies=TRUE)
 if(!require(stringr)) install.packages("stringr", dependencies=TRUE)
 if(!require(forcats)) install.packages("forcats", dependencies=TRUE)
+if(!require(egg)) install.packages("egg", dependencies=TRUE)
 
 library(readxl)
 library(dplyr)
@@ -18,6 +19,7 @@ library(tidyr)
 library(ggpubr)
 library(stringr)
 library(forcats)
+library(egg)
 
 #Set your working directory
 setwd("~/R/SepticShock")
@@ -85,7 +87,7 @@ tidy_table$Group <- factor(tidy_table$Group,
                                       "Estradiol"))
 tidy_table$Mean <-  as.numeric(tidy_table$Mean)
 
-physio_list <- c("Amino Acids",'Nucleotides','Glycolysis and TCA cycle','Misc Processes','Lipid Metabolism and Biosynthesis','Fatty Acids')
+physio_list <- c("Amino Acids",'Nucleotides','Glycolysis and TCA cycle','Misc Processes','Lipid Biosynthesis','Fatty Acids')
 physio_list<-as.data.frame(physio_list)
 colnames(physio_list) <- "Physio"
 tidy_table$Physio <- 0
@@ -96,15 +98,23 @@ tidy_table$Physio[148:225] <- physio_list[4,1]
 tidy_table$Physio[226:300] <- physio_list[5,1]
 tidy_table$Physio[301:351] <- physio_list[6,1]
 
-
-
+# Calculate the means and divide by the Male group mean
+comparison_table <- tidy_table %>%
+  group_by(Observation) %>%
+  mutate(Male_Mean = Mean[Group == "Male"],
+         Ratio_to_Male = Mean / Male_Mean) %>%
+  select(Observation, Group, Ratio_to_Male, Physio) %>%
+  ungroup()
+colnames(comparison_table)[3] <- "Mean"
 
 for (physio in physio_list$Physio) {
 
-plot_table <- tidy_table %>%
+plot_table1 <- tidy_table %>%
+  filter(Physio == physio)
+plot_table2 <- comparison_table %>%
   filter(Physio == physio)
 
-p <- ggplot(plot_table, 
+p <- ggplot(plot_table1, 
              aes(x = Group, y = fct_rev(as_factor(Observation)), fill = Mean)) +
   geom_tile(color = "white",
             lwd = 1.5,
@@ -117,17 +127,57 @@ p <- ggplot(plot_table,
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.border=element_blank(),
-        plot.title = element_text(hjust = 0.5)) +
+        plot.title = element_text(hjust = 0.5),
+        legend.key.height = 0.2*unit(n_distinct(plot_table1$Observation), 'cm'),
+        legend.key.width = 0.25*unit(n_distinct(plot_table1$Group), 'cm'),
+        legend.title=element_blank()) +
   labs(title = paste(physio, "Relative to Baseline"),
        y = '',
        x = '')
 
 print(p)
 
+q <- ggplot(plot_table2, 
+            aes(x = Group, y = fct_rev(as_factor(Observation)), fill = Mean)) +
+  geom_tile(color = "black",
+            lwd = 0.5,
+            linetype = 1) +
+  scale_y_discrete(expand = c(0, 0)) +
+  scale_x_discrete(expand = c(0, 0)) +
+  scale_fill_gradient2(low = '#440154', mid = "white", high = "#fde725", midpoint = 1, 
+                       limits = c(0.25, 
+                                  1.25),
+                       name = "Ratio to Male") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border=element_blank(),
+        plot.title = element_text(hjust = 0.5),
+        legend.key.height = 0.2*unit(n_distinct(plot_table2$Observation), 'cm'),
+        legend.key.width = 0.25*unit(n_distinct(plot_table2$Group), 'cm'),
+        legend.title=element_blank()) +
+  labs(title = paste(physio, "Relative to Baseline as a Ratio of Male"),
+       y = '',
+       x = '')
+
+print(q)
+
+
+b <- egg::set_panel_size(p, height=unit(n_distinct(plot_table1$Observation), "cm"),
+                           width=4*unit(n_distinct(plot_table1$Group), "cm") )
+d <- egg::set_panel_size(q, height=unit(n_distinct(plot_table2$Observation), "cm"),
+                           width=4*unit(n_distinct(plot_table2$Group), "cm") )
+
 # Save each plot as a PNG file
 ggsave(filename = paste0("Heatmap_",physio,".png"),
        path = '~/R/SepticShock/Heatmaps/Metabolite',
-       plot = p, 
-       width = 8, 
-       height = 6)
+       plot = b, 
+       width = 3*unit(n_distinct(plot_table2$Group), "cm"), 
+       height = 0.45*unit(n_distinct(plot_table2$Observation), "cm"))
+ggsave(filename = paste0("HeatmapRatio_",physio,".png"),
+       path = '~/R/SepticShock/Heatmaps/Metabolite',
+       plot = d, 
+       width = 3*unit(n_distinct(plot_table2$Group), "cm"), 
+       height = 0.45*unit(n_distinct(plot_table2$Observation), "cm"))
+
 }
