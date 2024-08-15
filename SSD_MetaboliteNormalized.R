@@ -49,6 +49,8 @@ tidy_data$Treatment <- factor(tidy_data$Treatment)
 tidy_data$Observation <- factor(tidy_data$Observation)
 
 
+####### ANALYSIS ###############################################################
+
 # Calculate means and standard deviations
 mean_sd_table <- tidy_data %>%
   group_by(Observation, `Sex:Treatment`) %>%
@@ -101,7 +103,8 @@ sig_observations <- sig_observations %>%
 
 write.csv(sig_observations, "SSD_MetaboliteNormalized_Sig_Observations.csv", row.names = FALSE)
 
-############
+####### PLOTTING ###############################################################
+
 for (observation in sig_observations$Observation) {
   original_observation <- name_mapping[[observation]]
   
