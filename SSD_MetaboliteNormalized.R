@@ -1,23 +1,22 @@
-# Load necessary libraries
-if(!require(readxl)) install.packages("readxl", dependencies=TRUE)
-if(!require(dplyr)) install.packages("dplyr", dependencies=TRUE)
-if(!require(ggplot2)) install.packages("ggplot2", dependencies=TRUE)
-if(!require(viridis)) install.packages("viridis", dependencies=TRUE)
-if(!require(rstatix)) install.packages("rstatix", dependencies=TRUE)
-if(!require(tidyr)) install.packages("tidyr", dependencies=TRUE)
-if(!require(ggpubr)) install.packages("ggpubr", dependencies=TRUE)
+####### PREAMBLE ###############################################################
+
+requiredPackages <- c("readxl", "dplyr", "ggplot2", "viridis", "rstatix", "tidyr", "ggpubr")
 
 
-library(readxl)
-library(dplyr)
-library(ggplot2)
-library(viridis)
-library(rstatix)
-library(tidyr)
-library(ggpubr)
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg))
+    install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+
+ipak(requiredPackages)
 
 #Set your working directory
 setwd("~/R/SepticShock")
+
+
+####### DATA PREP ##############################################################
 
 # Read the original data from the first sheet "Clinical Data" to get the original column names
 original_data <- read_excel("SepticShockDataR.xlsx", sheet = "Normalized Metabolite Data")
