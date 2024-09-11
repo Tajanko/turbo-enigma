@@ -201,7 +201,8 @@ for (observation in sig_observations$Observation) {
                                       c("Estradiol:LPS", "Female:LPS"),
                                       c("Estradiol:LPS", "Male:LPS"),
                                       c("Male:Control", "Male:LPS"), 
-                                      c("Female:Control", "Female:LPS")),
+                                      c("Female:Control", "Female:LPS"),
+                                      c("Female:Control", "Male:Control")), 
                    step.increase = 0.12) %>%
     add_x_position(test = ., x = 'Sex:Treatment')
   
@@ -223,7 +224,7 @@ for (observation in sig_observations$Observation) {
                size = 0.5, 
                position=position_jitterdodge(jitter.width = 0.2), 
                show.legend = FALSE) +  # Disable legend for now
-    labs(title = paste("Results for", original_observation),
+    labs(title = paste(" "),
          y = original_observation) +
     stat_pvalue_manual(plot_tukey, 
                        label = "p.adj.signif", 
@@ -257,16 +258,23 @@ plot_2x2 <- (plots_list[[sig_observations$Observation[4]]] + plots_list[[sig_obs
                                           legend.title = element_text(size = 15),
                                           legend.key.size = unit(1.25, "cm"),
                                           legend.spacing.x = unit(1, 'cm'))
+plot_2x2 <- plot_2x2 + plot_annotation(tag_levels = c('A', '1')) & 
+  theme(plot.tag.position = c(0, 1),
+        plot.tag = element_text(size = 18, hjust = 0, vjust = 0.7))
 
 # Combine plots into a 2x3 grid with a shared legend
-plot_2x3 <- (plots_list[[sig_observations$Observation[1]]] + plots_list[[sig_observations$Observation[2]]]) / 
-  (plots_list[[sig_observations$Observation[3]]] + plots_list[[sig_observations$Observation[5]]]) / 
-  (plots_list[[sig_observations$Observation[6]]] + plots_list[[sig_observations$Observation[10]]]) + 
+plot_2x3 <- (plots_list[[sig_observations$Observation[1]]] + plots_list[[sig_observations$Observation[2]]] + plot_layout(tag_level = 'new')) / 
+  (plots_list[[sig_observations$Observation[3]]] + plots_list[[sig_observations$Observation[5]]] + plot_layout(tag_level = 'new')) / 
+  (plots_list[[sig_observations$Observation[6]]] + plots_list[[sig_observations$Observation[10]]] + plot_layout(tag_level = 'new')) + 
   plot_layout(guides = "collect") & theme(legend.position = 'right',
                                           legend.text = element_text(size = 15),
                                           legend.title = element_text(size = 18),
                                           legend.key.size = unit(1.5, "cm"),
-                                          legend.spacing.x = unit(1, 'cm'))
+                                          legend.spacing.x = unit(1, 'cm')) 
+
+plot_2x3 <- plot_2x3 + plot_annotation(tag_levels = c('A', '1')) & 
+  theme(plot.tag.position = c(0, 1),
+        plot.tag = element_text(size = 18, hjust = 0, vjust = 0.7))
 
 
 # Save the combined plots
